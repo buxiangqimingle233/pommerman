@@ -14,7 +14,8 @@ from .. import utility
 
 # BFS Section
 
-BFS_EPISODES = 6
+BFS_EPISODES = 5
+
 
 class Bomb:
     def __init__(self, obs, exist_bombs):
@@ -47,13 +48,13 @@ class BFSNode:
         return self.taken_action[1]
 
 
-def In_range_of_bomb(board, bombs, position, danger_bomb_list):
+def InRangeOfBomb(board, bombs, position, danger_bomb_list):
     position_x, position_y = position
     for bomb in bombs:
         bomb_x, bomb_y = bomb.position
         safe_from_bomb = False
-        # if bomb.life > bomb.blast_strength + 3:
-        #     safe_from_bomb = True
+        if bomb.life > bomb.blast_strength + 3:
+            safe_from_bomb = True
         if (bomb_x == position_x and abs(bomb_y - position_y) <= bomb.blast_strength):
             for pix_y in range(min(bomb_y, position_y), max(bomb_y, position_y)):
                 if utility.position_is_wall(board, (position_x, pix_y)):
@@ -67,44 +68,15 @@ def In_range_of_bomb(board, bombs, position, danger_bomb_list):
         if not safe_from_bomb:
             danger_bomb_list.append(bomb)
     return len(danger_bomb_list)>0
-            
-def isWell(board, my_position,enemies):
-    cnt = 0
-    for move in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-        new_position = (my_position[0]+move[0], my_position[1]+move[1])
-        if utility.position_on_board(board, new_position) and utility.position_is_passable(board, new_position,enemies):
-            cnt += 1
-    if cnt <= 1:
-        return True
-    else:
-        return False
+          
 
-def isSecondWell(board ,my_position,enemies):
-    cnt = 0
-    for move in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-        new_position = (my_position[0] + move[0], my_position[1] + move[1])
-        if utility.position_on_board(board, new_position) and utility.position_is_passable(board, new_position,
-                                                                                           enemies):
-            cnt += 1
-    if cnt != 2:
-        return False
-    for move in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-        new_position = (my_position[0] + move[0], my_position[1] + move[1])
-        if utility.position_on_board(board, new_position) and utility.position_is_passable(board, new_position,
-                                                                                               enemies):
-            if isWell(board, new_position, enemies):
-                return True
-    else:
-        return False
-
-
-def Change_bombs_life(board, bombs):
+def ChangeBombLife(board, bombs):
     # 修改能够连锁爆炸的炸弹life
     new_bombs = []
     for bomb in bombs:
         bomb_position = bomb.position
         danger_bomb_list = []
-        if In_range_of_bomb(board, bombs, bomb_position, danger_bomb_list):
+        if InRangeOfBomb(board, bombs, bomb_position, danger_bomb_list):
             for other_bomb in danger_bomb_list:
                 if other_bomb.position == bomb.position: continue
                 bomb.life = min(bomb.life, other_bomb.life)
@@ -121,11 +93,11 @@ def CanGo(bfs_node, action, enemies):
         return False
     board = bfs_node.board
     bombs = bfs_node.bombs
-    new_bombs = Change_bombs_life(board, bombs)
-    return not In_range_of_bomb(board, new_bombs, new_position, [])
+    new_bombs = ChangeBombLife(board, bombs)
+    return not InRangeOfBomb(board, new_bombs, new_position, [])
 
 
-def Step_forward(board, bombs):
+def StepForward(board, bombs):
     new_board, new_bombs = deepcopy(board), deepcopy(bombs)
     for bomb in new_bombs:
         if bomb.life > 0:
@@ -133,7 +105,7 @@ def Step_forward(board, bombs):
     return new_board, bombs
     
 
-def BFS_when_unsafe(my_position, obs, bombs, enemies, trained_num=0):
+def BfsWhenUnsafe(my_position, obs, bombs, enemies, trained_num=0):
     q = queue.Queue()
     q.put(BFSNode(obs, bombs, my_position, [constants.Action.Stop], 0))
     ret = []
@@ -149,7 +121,7 @@ def BFS_when_unsafe(my_position, obs, bombs, enemies, trained_num=0):
             else:
                 action = utility.get_direction(temp_node.my_position, new_position)
             if CanGo(temp_node, action, enemies):
-                new_board, new_bombs = Step_forward(temp_node.board, temp_node.bombs)
+                new_board, new_bombs = StepForward(temp_node.board, temp_node.bombs)
                 q.put(BFSNode(temp_node.obs, new_bombs, new_position, temp_node.taken_action+[action], temp_node.steps+1))     
     
     ret.sort(key=lambda x: x.dist_from_start())
@@ -157,7 +129,7 @@ def BFS_when_unsafe(my_position, obs, bombs, enemies, trained_num=0):
 
 # End of BFS Section
 
-def Try_to_kick(my_position, can_kick, bombs):
+def TryToKick(my_position, can_kick, bombs):
     if not can_kick:
         return None
     for move in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -220,7 +192,7 @@ class MyAgent(BaseAgent):
         is_unsafe_after_action = self._is_unsafe_after_action(
             board, my_position, bombs, dist)
         if unsafe_directions or is_unsafe_after_action:
-            ret = BFS_when_unsafe(my_position, obs, my_bombs, enemies, trained_num=trained_num)
+            ret = BfsWhenUnsafe(my_position, obs, my_bombs, enemies, trained_num=trained_num)
             directions = self._find_safe_directions(
             board, my_position, unsafe_directions, bombs, enemies, dist)
             # print(len(ret))
@@ -229,7 +201,7 @@ class MyAgent(BaseAgent):
             else:
                 alter_choice = random.choice(directions)
                 if alter_choice == constants.Action.Stop:
-                    kick_action = Try_to_kick(my_position, obs['can_kick'], my_bombs)
+                    kick_action = TryToKick(my_position, obs['can_kick'], my_bombs)
                     if kick_action is not None:
                         return kick_action.value
                 else:
@@ -279,9 +251,9 @@ class MyAgent(BaseAgent):
             if directions:
                 return directions[0].value
 
-        # Move backwards an enemy if there are two in exactly five reachable spaces.
-        direction = self._near_enemy(my_position, items, dist, prev, realenemies, 5)
-        if direction is not None and self._near_enemy_cnt(dist, items, 3, enemies) > 1:
+        # Move backwards an enemy if there are two in exactly three reachable spaces.
+        direction = self._near_enemy(my_position, items, dist, prev, realenemies, 3)
+        if direction is not None and self._near_enemy_cnt(dist, items, 3,realenemies) > 1:
             directions = [constants.Action.Down,constants.Action.Up,constants.Action.Left,constants.Action.Right]
             directions = self._filter_invalid_directions(board,my_position,directions,enemies)
             directions = self._filter_unsafe_directions(board,my_position,directions,bombs)
@@ -300,7 +272,7 @@ class MyAgent(BaseAgent):
                 return direction.value
 
         # Lay pomme if we are adjacent to an enemy.
-        if self._is_adjacent_enemy(items, dist, realenemies, blast_strength//3 + 1 ,my_position) and self._maybe_bomb(
+        if self._is_adjacent_enemy(items, dist, realenemies, blast_strength//2 + 1 ,my_position) and self._maybe_bomb(
         ammo, blast_strength, items, dist, my_position):
             return constants.Action.Bomb.value
 
@@ -321,29 +293,19 @@ class MyAgent(BaseAgent):
             board, my_position, directions, enemies)
         directions = self._filter_unsafe_directions(board, my_position,
                                                     valid_directions, bombs)
-        new_directions=[]
-        for direction in directions:
-            if not (isWell(board, utility.get_next_position(my_position, direction), enemies) or isSecondWell(board,utility.get_next_position(my_position, direction),enemies)):
-                new_directions.append(direction)
-        if not len(new_directions):
-            new_directions=[constants.Action.Stop]
-        directions = new_directions[:]
         directions = self._filter_recently_visited(
             directions, my_position, self._recently_visited_positions)
         if len(directions) > 1:
             directions = [k for k in directions if k != constants.Action.Stop]
         if not len(directions):
-            directions = new_directions
+            directions = [constants.Action.Stop]
 
         # Add this position to the recently visited uninteresting positions so we don't return immediately.
         self._recently_visited_positions.append(my_position)
         self._recently_visited_positions = self._recently_visited_positions[
             -self._recently_visited_length:]
-        random.shuffle(directions)
-        #for direction in directions:
-        #    if not isWell(board, utility.get_next_position(my_position, direction), enemies) and not isSecondWell(board,utility.get_next_position(my_position, direction),enemies):
-        #        return direction.value
-        return directions[0].value
+
+        return random.choice(directions).value
 
     @staticmethod
     def _djikstra(board, my_position, bombs, enemies, depth=None, exclude=None):
@@ -722,4 +684,3 @@ class MyAgent(BaseAgent):
         if not ret:
             ret = directions
         return ret
-
